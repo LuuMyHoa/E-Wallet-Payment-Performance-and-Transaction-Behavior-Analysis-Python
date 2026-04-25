@@ -19,7 +19,7 @@ The project aims to:
 
 ## 📂 Dataset Description
 
-### 📌 Data Source  
+### Data Source  
 **Source:** Internal simulation dataset
 
 | Table            | Description                                 | Size       |
@@ -44,23 +44,11 @@ The project aims to:
 ```python
 #Create df_payment_enriched (Merge payment + product)
 df_payment_enriched = pd.merge(df_payment,df_product,on="product_id",how="left")
+```
 
+```python
 #Check data type
 df_payment_enriched.dtypes
-
-#Check missing data
-df_payment_enriched.isnull().sum()
-
-#Check duplicate
-df_payment_enriched.duplicated().sum()
-
-#Check invalid or abnormal values
-df_payment_enriched['volume'].describe()
-df_payment_enriched['report_month'].value_counts()
-df_payment_enriched['payment_group'].value_counts()
-dF_payment_enriched['category'].value_counts()
-df_payment_enriched['team_own'].value_counts()
-
 ```
 
 ```python
@@ -68,33 +56,50 @@ df_payment_enriched['team_own'].value_counts()
 df_payment_enriched['report_month'] = pd.to_datetime(df_payment_enriched['report_month'], format='%Y-%m')
 ```
 
+```python
+#Check missing data
+df_payment_enriched.isnull().sum()
+```
+```python
+#Check duplicate
+df_payment_enriched.duplicated().sum()
+```
+
+```python
+#Check invalid or abnormal values
+df_payment_enriched['volume'].describe()
+df_payment_enriched['report_month'].value_counts()
+df_payment_enriched['payment_group'].value_counts()
+dF_payment_enriched['category'].value_counts()
+df_payment_enriched['team_own'].value_counts()
+```
+
 **EDA df_transactions**
 
 ```python
 #Check data type
 df_transactions.dtypes
-
+```
+```python
+#Convert timeStamp → datetime
+df_transactions['timeStamp'] = pd.to_datetime(df_transactions['timeStamp'], unit='ms')
+```
+```python
 #Check missing data
 df_transactions.isnull().sum()
-
+```
+```python
 #Check duplicate
 df_transactions.duplicated().sum()
-
-#Check invalid or abnormal values
-df_transactions['volume'].describe()
-df_transactions['transType'].value_counts()
-
 ```
-
 ```python
 #Remove duplicate
 df_transactions.drop_duplicates()
-
-#Convert timeStamp → datetime
-df_transactions['timeStamp'] = pd.to_datetime(
-    df_transactions['timeStamp'], unit='ms'
-)
-
+```
+```python
+#Check invalid or abnormal values
+df_transactions['volume'].describe()
+df_transactions['transType'].value_counts()
 ```
 
 ### 2️⃣ Data Wrangling & Business Analysis
@@ -111,15 +116,23 @@ top3_products = (
     .head(3)                                      
     .reset_index(drop=True)
 )
-top3_products.index += 1  
-print(top3_products.to_string())
+top3_products.index += 1
+top3_products
 ```
 
 **2. Data integrity check**
 Validate rule: Each product belongs to only one team
 
 ```python
+teams_per_product = (
+    DF_product
+    .groupby('product_id')['team_own']
+    .nunique()                    
+    .reset_index()
+    .rename(columns={'team_own': 'num_teams'})
+)
 
+abnormal = teams_per_product[teams_per_product['num_teams'] > 1]
 ```
 
 **3. Team performance analysis**
