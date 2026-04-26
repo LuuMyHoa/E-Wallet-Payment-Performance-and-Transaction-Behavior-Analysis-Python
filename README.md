@@ -39,72 +39,87 @@ The project aims to:
 - Duplicate records
 - Invalid or abnormal values
 
-**EDA df_payment_enriched**
+**EDA: df_payment_enriched**
 
 ```python
 #Create df_payment_enriched (Merge payment + product)
 df_payment_enriched = pd.merge(df_payment,df_product,on="product_id",how="left")
-```
 
-```python
 #Check data type
 df_payment_enriched.dtypes
-```
 
-```python
 #Convert report_month → datetime
 df_payment_enriched['report_month'] = pd.to_datetime(df_payment_enriched['report_month'], format='%Y-%m')
-```
 
-```python
 #Check missing data
 df_payment_enriched.isnull().sum()
-```
-```python
+
 #Check duplicate
 df_payment_enriched.duplicated().sum()
-```
 
-```python
 #Check invalid or abnormal values
 df_payment_enriched['volume'].describe()
-df_payment_enriched['report_month'].value_counts()
 df_payment_enriched['payment_group'].value_counts()
-dF_payment_enriched['category'].value_counts()
-df_payment_enriched['team_own'].value_counts()
 ```
+**Key findings:**
 
-**EDA df_transactions**
+✅ Data types consistent after converting report_month → datetime
+
+⚠️ Missing values:
+- category, team_own (~22 rows)
+- Cause: unmatched product_id after LEFT JOIN
+- Action: Retained to avoid losing volume (business-critical metric)
+  
+✅ No duplicate records
+
+✅ Volume distribution reflects real-world behavior (wide range)
+
+✅ payment_group only contains valid values: payment, refund
+
+👉 Clean dataset, no critical data quality issues
+
+**EDA: df_transactions**
 
 ```python
 #Check data type
 df_transactions.dtypes
-```
-```python
+
 #Convert timeStamp → datetime
 df_transactions['timeStamp'] = pd.to_datetime(df_transactions['timeStamp'], unit='ms')
-```
-```python
+
 #Check missing data
 df_transactions.isnull().sum()
-```
-```python
+
 #Check duplicate
 df_transactions.duplicated().sum()
-```
-```python
+
 #Remove duplicate
-df_transactions.drop_duplicates()
-```
-```python
+df_transactions = df_transactions.drop_duplicates()
+
 #Check invalid or abnormal values
 df_transactions['volume'].describe()
 df_transactions['transType'].value_counts()
+df_transactions['transStatus'].value_counts()
 ```
+**Key findings:**
 
+⚠️ Missing values (business-valid):
+- sender_id: top-up transactions
+- receiver_id: withdrawal transactions
+- extra_info: optional field
+  
+⚠️ 28 duplicate rows → removed
+
+✅ Transaction status: 1 = success, <0 = failed
+  
+⚠️ Mixed transaction types: Only transType = 2, 8 are relevant. Others retained for data integrity
+
+👉 Large-scale transactional dataset with valid business patterns
+  
 ### 2️⃣ Data Wrangling & Business Analysis
 
 **1. Top-performing products**
+
 Identify Top 3 product_ids by total volume
 
 ```python
@@ -117,10 +132,16 @@ top3_products = (
     .reset_index(drop=True)
 )
 top3_products.index += 1
-top3_products
 ```
 
+| | product_id | volume |
+| :--- | :--- | :--- |
+| 1 | 1976 | 61797583647 |
+| 2 | 429 | 14667676567 |
+| 3 | 372 | 13713658515 |
+
 **2. Data integrity check**
+
 Validate rule: Each product belongs to only one team
 
 ```python
@@ -134,8 +155,14 @@ teams_per_product = (
 
 abnormal = teams_per_product[teams_per_product['num_teams'] > 1]
 ```
+|product_id	|num_teams|
+|---|---|
+|   |    |
+
+No abnormal
 
 **3. Team performance analysis**
+
 Identify lowest-performing team since Q2 2023. Drill down: Which category contributes the least
 
 ```python
@@ -153,17 +180,42 @@ team_volume = (
 team_volume.columns = ['team_own', 'total_volume']
 
 worst_team = team_volume.iloc[0]['team_own']
-worst_volume = team_volume.iloc[0]['total_volume']
-
 ```
-**4. Refund analysis**
-Analyze refund transaction contribution by source_id
-Identify: Source causing the highest refund volume
 
-```pythom
-df_refund = df_payment_enriched[
-    df_payment_enriched['payment_group'] == 'refund'
-].copy()
+| | team_own | total_volume |
+| :--- | :--- | :--- |
+| 0 | APS | 51141753 |
+| 1 | ASL | 11284361730 |
+| 2 | ASD | 31090428473 |
+
+worst_team : APS 
+
+```python
+category_volume = (
+    df_q2[df_q2['team_own'] == worst_team]
+    .groupby('category')['volume']
+    .sum()
+    .sort_values()
+    .reset_index()
+)
+category_volume.columns = ['category', 'total_volume']
+total_team_vol = category_volume['total_volume'].sum()
+category_volume['contribution_%'] = (
+    category_volume['total_volume'] / total_team_vol * 100
+).round(2)
+```
+
+| | category | total_volume | contribution_% |
+| :--- | :--- | :--- | :--- |
+| 0 | PXXXXXE | 25232438 | 49.34 |
+| 1 | PXXXXXS | 25909315 | 50.66 |
+
+**4. Refund analysis**
+
+Analyze refund transaction contribution by source_id. Identify: Source causing the highest refund volume
+
+```python
+df_refund = df_payment_enriched[df_payment_enriched['payment_group'] == 'refund'].copy()
 
 source_contribution = (
     df_refund
@@ -172,13 +224,22 @@ source_contribution = (
     .reset_index()
     .sort_values('volume', ascending=False)
 )
+
 total_refund_vol = source_contribution['volume'].sum()
 source_contribution['contribution_%'] = (
     source_contribution['volume'] / total_refund_vol * 100
 ).round(2)
 ```
 
+
+| | source_id | volume | contribution_% |
+| :--- | :--- | :--- | :--- |
+| 1 | 38 | 36527454759 | 59.11 |
+| 2 | 39 | 16119059662 | 26.08 |
+| 0 | 37 | 9151069226 | 14.81 |
+
 **5. Transaction classification**
+
 Define transaction_type based on business rules: Bank Transfer, Withdraw, Top-up, Payment, Transfer, Split Bill, Invalid
 
 ```python
@@ -205,27 +266,47 @@ df_transactions['transaction_type'] = np.select(
 )
 
 type_counts = df_transactions['transaction_type'].value_counts()
-print("\nPhân phối transaction type:")
-print(type_counts)
+
 ```
+
+| transaction_type | count |
+| :--- | :--- |
+| Payment Transaction | 398665 |
+| Transfer Money Transaction | 341173 |
+| Top Up Money Transaction | 290498 |
+| Invalid Transaction | 220658 |
+| Bank Transfer Transaction | 37879 |
+| Withdraw Money Transaction | 33725 |
+| Split Bill Transaction | 1376 |
 
 **6. Transaction behavior analysis**
 
-For each valid transaction type: Number of transactions, Total volume, Unique senders, Unique receivers
+For each valid transaction type: number of transactions, total volume, unique senders, unique receivers
 
 ```python
-df_valid = df_transactions[
-    df_transactions['transaction_type'] != 'Invalid Transaction'
-].copy()
+df_valid = df_transactions[df_transactions['transaction_type'] != 'Invalid Transaction'].copy()
 
 summary = df_valid.groupby('transaction_type').agg(
     num_transactions=('transaction_id', 'count'),          
-    total_volume=('volume', 'sum'),                         
-    num_senders=('sender_id', 'nunique'),                  
-    num_receivers=('receiver_id', 'nunique')               
+    total_volume=('volume', 'sum'),                        
+    num_senders=('sender_id', 'nunique'),                 
+    num_receivers=('receiver_id', 'nunique')              
 ).reset_index()
 
+# format
+for col in summary.select_dtypes(include='number').columns:
+    summary[col] = summary[col].apply(lambda x: "{:,.0f}".format(x))
 ```
+
+| | transaction_type | num_transactions | total_volume | num_senders | num_receivers |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | Bank Transfer Transaction | 37,879 | 50,605,806,190 | 23,156 | 9,271 |
+| 1 | Payment Transaction | 398,665 | 71,850,608,441 | 139,583 | 113,298 |
+| 2 | Split Bill Transaction | 1,376 | 4,901,464 | 1,323 | 572 |
+| 3 | Top Up Money Transaction | 290,498 | 108,605,618,829 | 110,409 | 110,409 |
+| 4 | Transfer Money Transaction | 341,173 | 37,032,880,492 | 39,021 | 34,585 |
+| 5 | Withdraw Money Transaction | 33,725 | 23,418,181,420 | 24,814 | 24,814 |
+
 ## 🔎 Final Conclusion & Recommendations  
 
 👉🏻 Based on the insights and findings above, we would recommend the [stakeholder team] to consider the following:  
