@@ -161,7 +161,7 @@ abnormal = teams_per_product[teams_per_product['num_teams'] > 1]
 |---|---|
 |   |    |
 
-No abnormal
+No abnormal found → each product belongs to only one team
 
 **3. Team performance analysis**
 
@@ -310,8 +310,6 @@ for col in summary.select_dtypes(include='number').columns:
 | 5 | Withdraw Money Transaction | 33,725 | 23,418,181,420 | 24,814 | 24,814 |
 
 ## 🔎 Final Conclusion & Recommendations  
-
-👉🏻 Based on the insights and findings above, we would recommend the [stakeholder team] to consider the following:  
 
 📍 Key Takeaways:  
 - Recommendation 1  
