@@ -1,5 +1,7 @@
 # EDA and Data Wrangling for E-Wallet Payment Performance Analysis | Python
 
+![banner](banner.png)
+
 ## 📑 Table of Contents  
 1. [📌 Background & Overview](#-background--overview)  
 2. [📂 Dataset Description](#-dataset-description)
