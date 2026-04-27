@@ -1,23 +1,23 @@
-# EDA and Data Wrangling for E-Wallet Payment Performance Analysis | Python
+# E-Wallet Payment Performance & Transaction Behavior Analysis | Python
 
 ![banner](banner.png)
 
 ## 📑 Table of Contents  
 1. [📌 Background & Overview](#-background--overview)  
 2. [📂 Dataset Description](#-dataset-description)
-3. [⚒️ EDA & Data Wrangling](-eda--data-wrangling) 
-4. [🔎 Final Conclusion & Recommendations](#-final-conclusion--recommendations)
+3. [⚒️ Data Preparation & Quality Check](#data-preparation--quality-check)
+4. [🔎 Business Analysis](#-business-analysis)
+5. [📝 Conclusion & Recommendations](#-conclusion--recommendations)
 
 ## 📌 Background & Overview  
- 
-### Objectives
 
-The project aims to: 
+This project analyzes e-wallet transaction data to evaluate product performance, user behavior, and operational efficiency.
 
-- Perform Exploratory Data Analysis (EDA) to assess data quality
-- Apply Data Wrangling techniques to clean and transform data
-- Analyze product performance and transaction behavior
-- Categorize transactions into meaningful types for further analysis
+**Key objectives:**
+- Identify top-performing and underperforming products and teams  
+- Analyze transaction patterns and user behavior across different transaction types  
+- Detect potential risks such as high refund contribution and invalid transactions  
+- Support business decision-making through data-driven insights
 
 ## 📂 Dataset Description
 
@@ -30,19 +30,13 @@ The project aims to:
 | product.csv        | Product metadata (category, team ownership) | 492 rows x 3 cols  |
 | transactions.csv   | Detailed transaction records                | 1.3M+ rows x 9 cols |
 
-## ⚒️ EDA & Data Wrangling
+## ⚒️ Data Preparation & Quality Check
 
-### 1️⃣ Exploratory Data Analysis (EDA)  
+**1️⃣ Payment Data (df_payment_enriched)**
 
- **Key checks:**
+<details>
+<summary> Code Python </summary>
  
-- Data types consistency
-- Missing values
-- Duplicate records
-- Invalid or abnormal values
-
-**EDA: df_payment_enriched**
-
 ```python
 #Create df_payment_enriched (Merge payment + product)
 df_payment_enriched = pd.merge(df_payment,df_product,on="product_id",how="left")
@@ -63,25 +57,28 @@ df_payment_enriched.duplicated().sum()
 df_payment_enriched['volume'].describe()
 df_payment_enriched['payment_group'].value_counts()
 ```
+
+</details>
+
+**Actions:**
+- Merged `payment_report` with `product` (LEFT JOIN)
+- Converted `report_month` → datetime
+- Checked missing values, duplicates, abnormal values  
+
 **Key findings:**
+- Missing values (~22 rows in `category`, `team_own`) due to unmatched `product_id` → **retained to preserve volume**
+- No duplicate records detected  
+- Volume distribution reflects real-world behavior (wide range)
+- `payment_group` contains valid values: payment, refund
 
-✅ Data types consistent after converting report_month → datetime
+👉 Dataset is **clean and reliable for analysis**
 
-⚠️ Missing values:
-- category, team_own (~22 rows)
-- Cause: unmatched product_id after LEFT JOIN
-- Action: Retained to avoid losing volume (business-critical metric)
-  
-✅ No duplicate records
 
-✅ Volume distribution reflects real-world behavior (wide range)
+**2️⃣ Transaction Data (df_transactions)**
 
-✅ payment_group only contains valid values: payment, refund
-
-👉 Clean dataset, no critical data quality issues
-
-**EDA: df_transactions**
-
+<details>
+<summary> Code Python </summary>
+ 
 ```python
 #Check data type
 df_transactions.dtypes
@@ -103,22 +100,22 @@ df_transactions['volume'].describe()
 df_transactions['transType'].value_counts()
 df_transactions['transStatus'].value_counts()
 ```
+
+</details>
+
+**Actions:**
+- Converted timestamp → datetime  
+- Removed 28 duplicate rows  
+- Validated transaction fields  
+
 **Key findings:**
+- Missing values (sender_id, receiver_id) are business-valid (top-up & withdrawal flows)
+- Only `transType = 2, 8` are relevant for business logic  
+- `transStatus` (=1 or <0) reflects success vs failure  
 
-⚠️ Missing values (business-valid):
-- sender_id: top-up transactions
-- receiver_id: withdrawal transactions
-- extra_info: optional field
+👉 Large-scale dataset with realistic transaction patterns
   
-⚠️ 28 duplicate rows → removed
-
-✅ Transaction status: 1 = success, <0 = failed
-  
-⚠️ Mixed transaction types: Only transType = 2, 8 are relevant. Others retained for data integrity
-
-👉 Large-scale transactional dataset with valid business patterns
-  
-### 2️⃣ Data Wrangling & Business Analysis
+## 🔎 Business Analysis
 
 **1. Top-performing products**
 
@@ -134,13 +131,19 @@ top3_products = (
     .reset_index(drop=True)
 )
 top3_products.index += 1
+total_vol = df_payment_enriched['volume'].sum()
+top3_products['contribution_%'] = (
+    top3_products['volume'] / total_vol * 100
+).round(2)
 ```
 
-| | product_id | volume |
-| :--- | :--- | :--- |
-| 1 | 1976 | 61797583647 |
-| 2 | 429 | 14667676567 |
-| 3 | 372 | 13713658515 |
+|  | product_id | volume | contribution_% |
+|---|---|---|---|
+| 1 | 1976 | 61797583647 | 33.99 |
+| 2 | 429 | 14667676567 | 8.07 |
+| 3 | 372 | 13713658515 | 7.54 |
+
+👉 Top 3 products  drive nearly 50% of total volume, indicating high concentration and a strong reliance on a few key performers. This creates concentration risk, where a decline in top products could significantly impact overall transaction volume.
 
 **2. Data integrity check**
 
@@ -161,7 +164,7 @@ abnormal = teams_per_product[teams_per_product['num_teams'] > 1]
 |---|---|
 |   |    |
 
-No abnormal found → each product belongs to only one team
+👉 Each product belongs to only one team → no structural issues detected
 
 **3. Team performance analysis**
 
@@ -190,8 +193,6 @@ worst_team = team_volume.iloc[0]['team_own']
 | 1 | ASL | 11284361730 |
 | 2 | ASD | 31090428473 |
 
-worst_team : APS 
-
 ```python
 category_volume = (
     df_q2[df_q2['team_own'] == worst_team]
@@ -211,6 +212,8 @@ category_volume['contribution_%'] = (
 | :--- | :--- | :--- | :--- |
 | 0 | PXXXXXE | 25232438 | 49.34 |
 | 1 | PXXXXXS | 25909315 | 50.66 |
+
+👉  **APS** is the lowest-performing team since Q2 2023, contributing less than 1% of the total volume compared to other teams. No category within APS significantly drives volume, indicating a lack of product diversity or a niche operational scope.
 
 **4. Refund analysis**
 
@@ -233,12 +236,13 @@ source_contribution['contribution_%'] = (
 ).round(2)
 ```
 
-
 | | source_id | volume | contribution_% |
 | :--- | :--- | :--- | :--- |
 | 1 | 38 | 36527454759 | 59.11 |
 | 2 | 39 | 16119059662 | 26.08 |
 | 0 | 37 | 9151069226 | 14.81 |
+
+👉 One source (source_id = 38) contributes ~59% of total refund volume. Refund risk is highly concentrated.
 
 **5. Transaction classification**
 
@@ -281,6 +285,8 @@ type_counts = df_transactions['transaction_type'].value_counts()
 | Withdraw Money Transaction | 33725 |
 | Split Bill Transaction | 1376 |
 
+👉 A significant number of transactions are classified as “Invalid”. Data classification issue impacts reporting accuracy.
+
 **6. Transaction behavior analysis**
 
 For each valid transaction type: number of transactions, total volume, unique senders, unique receivers
@@ -309,9 +315,19 @@ for col in summary.select_dtypes(include='number').columns:
 | 4 | Transfer Money Transaction | 341,173 | 37,032,880,492 | 39,021 | 34,585 |
 | 5 | Withdraw Money Transaction | 33,725 | 23,418,181,420 | 24,814 | 24,814 |
 
-## 🔎 Final Conclusion & Recommendations  
+👉 Different transaction types reflect distinct user behaviors and use cases.
 
-📍 Key Takeaways:  
-- Recommendation 1  
-- Recommendation 2  
-- Recommendation 3
+## 🔎 Conclusion & Recommendations  
+
+### 📍 Key Insights
+- Transaction volume is highly concentrated in a few key products
+- One team (APS) significantly underperforms without a strong product driver
+- Refund volume is heavily skewed toward a single source
+- Data quality issues exist in transaction classification
+
+### 💡 Recommendations
+
+- Reduce dependency on top products by diversifying product performance  
+- Review and optimize strategy for underperforming teams (e.g., APS)  
+- Investigate root causes of high refund volume from source_id 38  
+- Improve transaction classification logic to reduce invalid records and enhance data quality  
